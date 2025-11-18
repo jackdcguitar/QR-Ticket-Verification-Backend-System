@@ -1,0 +1,161 @@
+# QR 驗票系統 - 主配置檔案
+spring:
+  application:
+    name: qr-ticket-verification-system
+
+  # MySQL 資料庫配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/qr_ticket_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Taipei&allowPublicKeyRetrieval=true
+    username: root
+    password: root123
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # JPA 配置
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        # 批次處理優化
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+  # MongoDB 配置
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: qr_ticket_logs
+      username: admin
+      password: admin123
+      # 連接池配置
+      auto-index-creation: true
+
+    # Redis 配置
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: 2000ms
+      timeout: 3000ms
+
+    # Elasticsearch 配置
+    elasticsearch:
+      repositories:
+        enabled: true
+
+  # Elasticsearch 連接配置
+  elasticsearch:
+    uris: http://localhost:9200
+    username: elastic
+    password: elastic123
+    connection-timeout: 5s
+    socket-timeout: 30s
+
+# JWT 配置
+jwt:
+  secret: QRTicketVerificationSystem2024SecretKeyForJWTTokenGenerationAndValidation
+  expiration: 86400000  # 24小時（毫秒）
+  refresh-expiration: 604800000  # 7天（毫秒）
+
+# QR Code 配置
+qrcode:
+  width: 300
+  height: 300
+  format: PNG
+  # QR Code 內容加密
+  encryption:
+    enabled: true
+    algorithm: AES
+    key: QRTicket2024Key16  # 16位元 AES Key
+  # QR Code 有效期（秒）
+  ttl: 300  # 5分鐘
+
+# Redis Key 配置
+redis:
+  key:
+    # 驗票使用紀錄 - qr:ticket:{ticketId}:used
+    ticket-used-prefix: "qr:ticket:"
+    ticket-used-suffix: ":used"
+    # 一次性 Token - qr:token:{token}
+    token-prefix: "qr:token:"
+    # QR Code 快取 - qr:code:{ticketId}
+    qrcode-prefix: "qr:code:"
+  ttl:
+    # 驗票使用紀錄 TTL（秒）- 活動結束後保留24小時
+    ticket-used: 86400
+    # 一次性 Token TTL（秒）
+    token: 300
+    # QR Code 快取 TTL（秒）
+    qrcode: 300
+
+# 驗票規則配置
+verification:
+  # 是否允許重複驗票
+  allow-duplicate: false
+  # 驗票時間容差（分鐘）- 允許活動開始前後的容差時間
+  time-tolerance: 30
+  # 是否啟用設備綁定
+  device-binding-enabled: true
+
+# 服務器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+# Actuator 健康檢查配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  health:
+    redis:
+      enabled: true
+    mongo:
+      enabled: true
+    elasticsearch:
+      enabled: true
+
+# 日誌配置
+logging:
+  level:
+    root: INFO
+    com.qrticket: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.data.mongodb: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/qr-ticket-system.log
+    max-size: 10MB
+    max-history: 30

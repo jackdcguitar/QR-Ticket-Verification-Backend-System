@@ -1,0 +1,199 @@
+version: '3.8'
+
+# QR 驗票系統 - Docker Compose 配置
+# 包含：MySQL、MongoDB、Redis、Elasticsearch、Kibana、應用程式
+
+services:
+  # MySQL 資料庫（主資料）
+  mysql:
+    image: mysql:8.0
+    container_name: qr-ticket-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: qr_ticket_db
+      MYSQL_USER: qr_user
+      MYSQL_PASSWORD: qr_pass123
+      TZ: Asia/Taipei
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    networks:
+      - qr-ticket-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB 資料庫（日誌資料）
+  mongodb:
+    image: mongo:6.0
+    container_name: qr-ticket-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: qr_ticket_logs
+      TZ: Asia/Taipei
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - qr-ticket-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 快取
+  redis:
+    image: redis:7.0-alpine
+    container_name: qr-ticket-redis
+    restart: unless-stopped
+    command: redis-server --requirepass redis123 --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - qr-ticket-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Elasticsearch 搜尋引擎
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: qr-ticket-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - ELASTIC_PASSWORD=elastic123
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - TZ=Asia/Taipei
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - qr-ticket-network
+    healthcheck:
+      test: curl -u elastic:elastic123 -s http://localhost:9200/_cluster/health | grep -q '"status":"green\|yellow"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Kibana 資料視覺化
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: qr-ticket-kibana
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=elastic123
+      - TZ=Asia/Taipei
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - qr-ticket-network
+    healthcheck:
+      test: curl -s http://localhost:5601/api/status | grep -q '"state":"green"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Spring Boot 應用程式
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qr-ticket-app
+    restart: unless-stopped
+    environment:
+      # Spring 配置
+      - SPRING_PROFILES_ACTIVE=prod
+
+      # MySQL 配置
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/qr_ticket_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Taipei&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=qr_user
+      - SPRING_DATASOURCE_PASSWORD=qr_pass123
+
+      # MongoDB 配置
+      - SPRING_DATA_MONGODB_HOST=mongodb
+      - SPRING_DATA_MONGODB_PORT=27017
+      - SPRING_DATA_MONGODB_DATABASE=qr_ticket_logs
+      - SPRING_DATA_MONGODB_USERNAME=admin
+      - SPRING_DATA_MONGODB_PASSWORD=admin123
+      - SPRING_DATA_MONGODB_AUTHENTICATION_DATABASE=admin
+
+      # Redis 配置
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_PASSWORD=redis123
+
+      # Elasticsearch 配置
+      - SPRING_ELASTICSEARCH_URIS=http://elasticsearch:9200
+      - SPRING_ELASTICSEARCH_USERNAME=elastic
+      - SPRING_ELASTICSEARCH_PASSWORD=elastic123
+
+      # JVM 參數
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC
+
+      # 時區
+      - TZ=Asia/Taipei
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - app_logs:/app/logs
+    networks:
+      - qr-ticket-network
+    healthcheck:
+      test: curl -f http://localhost:8080/api/actuator/health || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# 資料卷
+volumes:
+  mysql_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  app_logs:
+    driver: local
+
+# 網路
+networks:
+  qr-ticket-network:
+    driver: bridge
