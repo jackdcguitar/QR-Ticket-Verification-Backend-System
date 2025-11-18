@@ -71,8 +71,10 @@ spring:
     socket-timeout: 30s
 
 # JWT 配置
+# 安全提示：生產環境必須使用環境變數設定密鑰！
+# 設定方式：export JWT_SECRET=your-very-long-secret-key-at-least-512-bits
 jwt:
-  secret: QRTicketVerificationSystem2024SecretKeyForJWTTokenGenerationAndValidation
+  secret: ${JWT_SECRET:QRTicketVerificationSystem2024SecretKeyForJWTTokenGenerationAndValidation-DevOnly}
   expiration: 86400000  # 24小時（毫秒）
   refresh-expiration: 604800000  # 7天（毫秒）
 
@@ -82,10 +84,12 @@ qrcode:
   height: 300
   format: PNG
   # QR Code 內容加密
+  # 安全提示：生產環境必須使用環境變數設定密鑰！
+  # 設定方式：export AES_ENCRYPTION_KEY=your-32-character-key-for-aes256
   encryption:
     enabled: true
-    algorithm: AES
-    key: QRTicket2024Key16  # 16位元 AES Key
+    algorithm: AES-GCM
+    key: ${AES_ENCRYPTION_KEY:QRTicket2024AESKey256Bit4Prod}  # 32位元 AES-256 Key（生產環境請用環境變數）
   # QR Code 有效期（秒）
   ttl: 300  # 5分鐘
 
@@ -115,6 +119,12 @@ verification:
   time-tolerance: 30
   # 是否啟用設備綁定
   device-binding-enabled: true
+
+# CORS 跨域配置
+# 安全提示：生產環境必須設定實際的前端網域，絕不可使用 "*"
+# 設定方式：export CORS_ALLOWED_ORIGINS=https://example.com,https://www.example.com
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080}
 
 # 服務器配置
 server:

@@ -26,6 +26,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
     /**
+     * 根據用戶名或郵箱查詢用戶
+     * - 用於登錄時支援用戶名或郵箱登錄
+     * - Spring Data JPA 會自動生成查詢語法：
+     *   SELECT * FROM users WHERE username = ? OR email = ?
+     */
+    Optional<User> findByUsernameOrEmail(String username, String email);
+
+    /**
      * 根據手機號碼查詢用戶
      */
     Optional<User> findByPhone(String phone);
